@@ -9,6 +9,7 @@ import numpy as np
 import re
 import io
 import zipfile
+from io import BytesIO
 
 plt.rcParams.update({
     "text.usetex": False,
@@ -32,35 +33,43 @@ colorlist_warm70s = ['#368F8B', '#EC7C2D', '#B6C649','#AF7AA1','#EDC948', '#D4A7
 sns.set_palette(colorlist_warm70s)
 sns.set_style('white')
 
-# RADAR FUNCTION
-def radar_generic(row, scores, names, dates):
+def detect_suffixes(df):
+    return sorted(set(
+        int(m.group(1))
+        for c in df.columns
+        for m in [re.search(r'_(\d+)$', c)]
+        if m
+    ))
 
-    # Detect suffixes
-    suffixes = sorted(
-        set(int(m.group(1)) for c in row.index
-            for m in [re.search(r'_(\d+)$', c)] if m)
-    )
+def detect_metrics(df):
+    metrics = sorted(set(
+        re.sub(r'_\d+$', '', c)
+        for c in df.columns if re.search(r'_\d+$', c)
+    ))
+    # Keep only metrics with thresholds
+    return [m for m in metrics if f"{m}_seuil" in df.columns]
+
+# RADAR FUNCTION
+def radar_generic(row, df):
+    suffixes = detect_suffixes(df)
+    metrics  = detect_metrics(df)
     last_suffix = max(suffixes)
 
-    # Metrics present
-    base_metrics = []
-    for s in scores:
-        for suf in suffixes:
-            if f"{s}_{suf}" in row.index:
-                base_metrics.append(s)
-                break
-    base_metrics = list(dict.fromkeys(base_metrics))
-
-    # Collect values
+    # Collect values (handle missing metrics gracefully)
     values_per_measurement = {}
     for suf in suffixes:
-        values_per_measurement[suf] = [row[f"{m}_{suf}"] for m in base_metrics]
+        vals = []
+        for m in metrics:
+            col = f"{m}_{suf}"
+            vals.append(row[col] if col in row and pd.notna(row[col]) else np.nan)
+        values_per_measurement[suf] = vals
 
-    seuil = [row[f"{m}_seuil"] for m in base_metrics]
+    # Thresholds
+    seuil = [row[f"{m}_seuil"] for m in metrics]
 
-    # Close loop
+    # Close radar loop
     def close(v): return v + v[:1]
-    angles = np.linspace(0, 2*np.pi, len(base_metrics)+1)
+    angles = np.linspace(0, 2*np.pi, len(metrics)+1)
 
     for suf in suffixes:
         values_per_measurement[suf] = close(values_per_measurement[suf])
@@ -69,45 +78,51 @@ def radar_generic(row, scores, names, dates):
     # Plot
     fig, ax = plt.subplots(figsize=(8,8), subplot_kw=dict(polar=True))
 
-    for suf, iter in zip(suffixes, range(len(suffixes))):
-        lw = 3 if suf == last_suffix else 1.5
-        ls = '-' if suf == last_suffix else ':'
-        alpha = 0.25 if suf == last_suffix else 0.1
-        ax.plot(angles, values_per_measurement[suf], 
-                color=colorlist_warm70s[iter], lw=lw, ls = ls)
-        ax.fill(angles, values_per_measurement[suf], 
-                color=colorlist_warm70s[iter], alpha=alpha,  label="_nolegend_")
+    for i, suf in enumerate(suffixes):
+        lw = 3 if suf == last_suffix else 2
+        ls = '-' if suf == last_suffix else '-.'
+        alpha = 0.3 if suf == last_suffix else 0.1
+        color = colorlist_warm70s[i % len(colorlist_warm70s)]
 
-    # Remove default labels
+        ax.plot(angles, values_per_measurement[suf], color=color, lw=lw, ls=ls)
+        ax.fill(angles, values_per_measurement[suf], color=color, alpha=alpha, label="_nolegend_", ls=ls)
+
+    # Threshold line
+    # ax.plot(angles, seuil, linestyle="--", color="black", lw=2)
+
+    # Remove default xticks
     ax.set_xticks(angles[:-1])
     ax.set_xticklabels([])
 
-    # Curved rotated labels + threshold coloring
+    # Labels with red threshold logic
     rmax = ax.get_rmax()
 
-    for angle, metric in zip(angles[:-1], base_metrics):
-
-        final_val = row[f"{metric}_{last_suffix}"]
-        seuil_val = row[f"{metric}_seuil"]
-        color = "red" if final_val < seuil_val else "black"
+    for angle, metric in zip(angles[:-1], metrics):
+        final_val = row.get(f"{metric}_{last_suffix}", np.nan)
+        seuil_val = row.get(f"{metric}_seuil", np.nan)
+        color = "red" if pd.notna(final_val) and pd.notna(seuil_val) and final_val < seuil_val else "black"
 
         angle_deg = np.degrees(angle)
         rotation = angle_deg - 90
         if 180 < angle_deg < 327:
             rotation += 180
 
-        ax.text(angle, rmax * 1.12, names[metric],
+        ax.text(angle, rmax * 1.15, metric,
                 color=color,
                 fontweight="bold" if color=="red" else "normal",
                 rotation=rotation,
                 rotation_mode='anchor',
                 ha='center', va='center')
 
+    # Legend (dates)
+    dates = df.loc[0, df.columns.str.contains("Date")].values
     ax.legend(dates, bbox_to_anchor=(1.25,1.1))
-    # ax.set_title(row["Prenom"])
-    plt.tight_layout()
 
-    return fig
+    plt.tight_layout()
+    # plt.savefig(f"{row['Prenom']}.png")
+
+    return(fig)    
+
 
 # STREAMLIT UI
 st.title("📊 Radar d’évaluation des élèves")
@@ -132,32 +147,39 @@ names = {
 }
 
 if uploaded_file:
-    df = pd.read_csv(uploaded_file)
-    st.success("✅ Fichier chargé")
+    df = pd.read_csv(uploaded_file, sep=None, engine="python")
+    st.success("✅ Fichier chargé !")
 
-    dates = df.loc[0, df.columns.str.contains("Date")].values
+    # for _, row in df.iterrows():
+    #     radar_generic(row, df)
+    #     st.image(f"{row['Prenom']}.png")
+
     students = df["Prenom"].tolist()
 
+    # Student selector
     student = st.selectbox("👩‍🎓 Choisir un élève", students)
-
+    # student = st.selectbox("👩‍🎓 Choisir un élève", students)
     row = df[df["Prenom"] == student].iloc[0]
-    fig = radar_generic(row, scores, names, dates)
+    fig = radar_generic(row, df)
     st.pyplot(fig)
 
-    # ZIP DOWNLOAD
-    if st.button("📥 Télécharger tous les radars (ZIP)"):
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w") as zf:
-            for _, row in df.iterrows():
-                fig = radar_generic(row, scores, names, dates)
-                img_buffer = io.BytesIO()
-                fig.savefig(img_buffer, format="png")
-                zf.writestr(f"{row['Prenom']}.png", img_buffer.getvalue())
-                plt.close(fig)
 
-        st.download_button(
-            "⬇ Télécharger ZIP",
-            zip_buffer.getvalue(),
-            "radars_eleves.zip",
-            "application/zip"
-        )
+    # row = df[df["Prenom"] == student].iloc[0]
+    # fig = radar_generic(row, scores, names, dates)
+    # st.pyplot(fig)
+
+
+    zip_buffer = BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w") as zf:
+        for _, row in df.iterrows():
+            radar_generic(row, df)
+            fname = f"{row['Prenom']}.png"
+            zf.write(fname)
+
+    st.download_button(
+        "📥 Télécharger tous les graphiques (ZIP)",
+        data=zip_buffer.getvalue(),
+        file_name="student_radar_plots.zip",
+        mime="application/zip"
+    )
+
