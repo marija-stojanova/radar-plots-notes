@@ -6,13 +6,12 @@ import seaborn as sns
 import numpy as np
 import re
 
-# %matplotlib inline
-# %config InlineBackend.figure_format = 'svg'
+matplotlib.use("Agg")   # <- IMPORTANT for Streamlit cloud
 
 # Configure Matplotlib fonts
 plt.rcParams.update({
     "text.usetex": False,                # no LaTeX
-    "font.family": "sans-serif",         # base font family
+    "font.sans-serif": ["DejaVu Sans"],         # base font family
     "font.sans-serif": ["Helvetica"],    # prefer Helvetica
     "mathtext.fontset": "custom",        # custom math font
     "mathtext.rm": "Helvetica",          # math regular
@@ -21,9 +20,11 @@ plt.rcParams.update({
     "font.size": 15                       # global font size
 })
 
-matplotlib.rc('font', family='sans-serif') 
-matplotlib.rc('font', serif='Helvetica Neue') 
-matplotlib.rc('text', usetex='false') 
+# matplotlib.rc('font', family='sans-serif') 
+# matplotlib.rc('font', serif='Helvetica Neue') 
+# matplotlib.rc('text', usetex='false') 
+
+
 
 
 # define custom colormaps
@@ -48,18 +49,6 @@ colorlist_warm70s = ['#368F8B', '#EC7C2D', '#B6C649','#AF7AA1','#EDC948', '#D4A7
 sns.set_palette(colorlist_warm70s)
 sns.set_style('white')
 
-# Visualize palette
-# fig, ax = plt.subplots(figsize=(12, 2))
-# for i, color in enumerate(palette_20_warm70s_final):
-#     ax.add_patch(plt.Rectangle((i, 0), 1, 1, color=color))
-#     ax.text(i + 0.5, -0.3, color, ha='center', va='top', fontsize=8, rotation=45)
-
-# ax.set_xlim(0, len(palette_20_warm70s_final))
-# ax.set_ylim(-0.5, 1)
-# ax.axis('off')
-# plt.show()
-
-
 # df = pd.read_csv("data.csv")
 
 plt.rcParams['font.family'] = 'serif'
@@ -80,7 +69,7 @@ def radar_generic(row, scores, names, dates):
         for suf in suffixes:
             if f"{s}_{suf}" in row.index:
                 base_metrics.append(s)
-                break   # metric exists → keep it
+                break   # metric exists -> keep it
     # Remove duplicates
     base_metrics = list(dict.fromkeys(base_metrics))
 
