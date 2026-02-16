@@ -201,10 +201,16 @@ with st.expander("ℹ️ Aide pour préparer le fichier CSV"):
         "Prenom": ["Alice", "Brahim"],
         "Lire et comprendre une consigne_1": [2, 3],
         "Lire et comprendre une consigne_2": [3, 4],
-        "Lire et comprendre une consigne_seuil": [3, 3],
+        "Lire et comprendre une consigne_seuil": [3, ],
         "Comprendre un texte lu seul (13 lignes)_1": [1, 2],
         "Comprendre un texte lu seul (13 lignes)_2": [2, 3],
-        "Comprendre un texte lu seul (13 lignes)_seuil": [3, 3],
+        "Comprendre un texte lu seul (13 lignes)_seuil": [3, ],
+        "Comprendre un texte lu seul (23 lignes)_1": [1, 2],
+        "Comprendre un texte lu seul (23 lignes)_2": [2, 3],
+        "Comprendre un texte lu seul (23 lignes)_seuil": [3, ],
+        "Ecrire un texte (13 lignes)_1": [1, 2],
+        "Ecrire un texte (13 lignes)_2": [2, 3],
+        "Ecrire un texte (13 lignes)_seuil": [3, ],
         "Date_1": ["2024-09-01", "2024-09-01"],
         "Date_2": ["Juin 2024", "Juin 2024"]
     }
