@@ -10,11 +10,12 @@ import re
 import io
 import zipfile
 from io import BytesIO
+import textwrap
 
 plt.rcParams.update({
     "text.usetex": False,
-    "font.family": "sans-serif",
-    "font.sans-serif": ["DejaVu Sans"],   # Helvetica not on Linux
+    "font.family": "serif",
+    "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
     "font.size": 14
 })
 
@@ -29,7 +30,7 @@ palette_20_warm70s_final = [
     '#7B4F6D', '#AF7AA1'
 ]
 
-colorlist_warm70s = ['#368F8B', '#EC7C2D', '#B6C649','#AF7AA1','#EDC948', '#D4A72C','#A0CBE8', '#7FA26B']
+colorlist_warm70s = ['#368F8B','#AF7AA1','#7FA26B', '#D4A72C', '#B6C649','#EDC948','#A0CBE8',  '#EC7C2D',]
 sns.set_palette(colorlist_warm70s)
 sns.set_style('white')
 
@@ -54,7 +55,12 @@ def radar_generic(row, df):
     suffixes = detect_suffixes(df)
     metrics  = detect_metrics(df)
     last_suffix = max(suffixes)
-
+    plt.rcParams.update({
+    "text.usetex": False,
+    "font.family": "serif",
+    "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
+    "font.size": 16
+    })
     # Collect values (handle missing metrics gracefully)
     values_per_measurement = {}
     for suf in suffixes:
@@ -77,6 +83,35 @@ def radar_generic(row, df):
 
     # Plot
     fig, ax = plt.subplots(figsize=(8,8), subplot_kw=dict(polar=True))
+    # Radial limits (optional)
+    ax.set_ylim(0, 20)   # adjust to your grading scale
+
+    # Only even ticks
+    ticks = np.arange(0, 21, 5)
+    ax.set_yticks(ticks)
+    ax.set_yticklabels([str(t) for t in ticks])
+    for label in ax.get_yticklabels():
+        label.set_alpha(0.4)
+        label.set_fontsize(12)
+
+    # Make them subtle
+    ax.yaxis.grid(True, color="gray", alpha=0.2)
+    ax.xaxis.grid(True, color="gray", alpha=0.2)
+
+    # Outer colored band (background)
+    theta = np.linspace(0, 2*np.pi, 100)
+    outer_radius = ax.get_ylim()[1]
+    inner_radius = outer_radius * 0.92
+
+    theta = np.linspace(0, 2*np.pi, 100)
+    maxr = ax.get_ylim()[1]
+    
+    ax.fill_between(theta, 0, maxr*0.33, color="#E15759", alpha=0.08, label = '_nolegend_')  
+    ax.fill_between(theta, maxr*0.33, maxr*0.66, color="#F1CE63", alpha=0.08, label = '_nolegend_')  
+    ax.fill_between(theta, maxr*0.66, maxr, color="#59A14F", alpha=0.08, label = '_nolegend_')  
+
+    ax.fill_between(theta, inner_radius, outer_radius,
+                    color="#5FA8A5", alpha=0.25, label = '_nolegend_') 
 
     for i, suf in enumerate(suffixes):
         lw = 3 if suf == last_suffix else 2
@@ -89,7 +124,8 @@ def radar_generic(row, df):
 
     # Threshold line
     # ax.plot(angles, seuil, linestyle="--", color="black", lw=2)
-
+    ax.spines["polar"].set_color("#5FA8A5")
+    ax.spines["polar"].set_linewidth(3)
     # Remove default xticks
     ax.set_xticks(angles[:-1])
     ax.set_xticklabels([])
@@ -100,22 +136,29 @@ def radar_generic(row, df):
     for angle, metric in zip(angles[:-1], metrics):
         final_val = row.get(f"{metric}_{last_suffix}", np.nan)
         seuil_val = row.get(f"{metric}_seuil", np.nan)
-        color = "red" if pd.notna(final_val) and pd.notna(seuil_val) and final_val < seuil_val else "black"
+
+        is_below = pd.notna(final_val) and pd.notna(seuil_val) and final_val < seuil_val
+        color = "#E15759" if is_below else "black"
+        weight = "bold" if is_below else "normal"
 
         angle_deg = np.degrees(angle)
         rotation = angle_deg - 90
         if 180 < angle_deg < 327:
             rotation += 180
 
-        ax.text(angle, rmax * 1.15, metric,
+
+        max_len = 16
+        metric_wrapped = "\n".join(textwrap.wrap(metric, width=max_len))        
+        ax.text(angle, rmax * 1.15, metric_wrapped,
                 color=color,
-                fontweight="bold" if color=="red" else "normal",
+                fontweight=weight,
                 rotation=rotation,
                 rotation_mode='anchor',
                 ha='center', va='center')
 
     # Legend (dates)
     dates = df.loc[0, df.columns.str.contains("Date")].values
+
     ax.legend(dates, bbox_to_anchor=(1.25,1.1))
 
     plt.tight_layout()
@@ -126,47 +169,76 @@ def radar_generic(row, df):
 
 # STREAMLIT UI
 st.title("📊 Radar d’évaluation des élèves")
+
+with st.expander("ℹ️ Aide pour préparer le fichier CSV"):
+    st.markdown("## 📘 Format du fichier d’entrée (CSV)")
+
+    st.markdown("""
+    ### 🧩 Règles générales
+
+    Votre fichier CSV doit contenir :
+
+    **1) Une colonne élève**
+    - `Prenom`
+
+    **2) Des scores avec suffixes**
+    - Chaque compétence doit être répérée avec `_1`, `_2`, `_3`, … (mesures dans le temps)
+    - Exemple :  
+    - `Lire et comprendre une consigne_1`  
+    - `Lire et comprendre une consigne_2`
+
+    **3) Une colonne seuil pour chaque compétence**
+    - Nom exact : `Nom compétence_seuil`
+
+    **4) Colonnes dates (optionnel mais recommandé)**
+    - `Date_1`, `Date_2`, etc.
+                
+    ➡️ Le radar affiche automatiquement la dernière mesure (_n) et compare au seuil. 
+    """
+    )
+
+    sample_data = {
+        "Prenom": ["Alice", "Brahim"],
+        "Lire et comprendre une consigne_1": [2, 3],
+        "Lire et comprendre une consigne_2": [3, 4],
+        "Lire et comprendre une consigne_seuil": [3, 3],
+        "Comprendre un texte lu seul (13 lignes)_1": [1, 2],
+        "Comprendre un texte lu seul (13 lignes)_2": [2, 3],
+        "Comprendre un texte lu seul (13 lignes)_seuil": [3, 3],
+        "Date_1": ["2024-09-01", "2024-09-01"],
+        "Date_2": ["Juin 2024", "Juin 2024"]
+    }
+
+    df_sample = pd.DataFrame(sample_data)
+    st.markdown("### 🧪 Exemple de fichier")
+    st.dataframe(df_sample)
+
+
+    # Download button
+    sample_csv = df_sample.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        "📥 Télécharger un exemple de fichier CSV",
+        sample_csv,
+        "exemple_notes_eleves.csv",
+        "text/csv"
+    )
+
 st.write("Téléversez votre fichier CSV de notes.")
 
 uploaded_file = st.file_uploader("📂 Importer CSV", type=["csv"])
-
-scores = [
-    "Lire et comprendre une consigne",
-    "Comprendre un texte lu seul (13 lignes)",
-    "Ortographier correctement sous la dictee",
-    "Copie un texte sans erreur de 4 phrases",
-    "Rediger un texte de 4 phrases"
-]
-
-names = {
-    "Lire et comprendre une consigne": "Lire et comprendre\nune consigne",
-    "Comprendre un texte lu seul (13 lignes)": "Comprendre un texte\nlu seul (13 lignes)",
-    "Ortographier correctement sous la dictee": "Orthographier\nsous la dictée",
-    "Copie un texte sans erreur de 4 phrases": "Copie sans erreur\nde 4 phrases",
-    "Rediger un texte de 4 phrases": "Rédiger un texte\nde 4 phrases"
-}
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file, sep=None, engine="python")
     st.success("✅ Fichier chargé !")
 
-    # for _, row in df.iterrows():
-    #     radar_generic(row, df)
-    #     st.image(f"{row['Prenom']}.png")
 
     students = df["Prenom"].tolist()
 
     # Student selector
     student = st.selectbox("👩‍🎓 Choisir un élève", students)
-    # student = st.selectbox("👩‍🎓 Choisir un élève", students)
     row = df[df["Prenom"] == student].iloc[0]
     fig = radar_generic(row, df)
     st.pyplot(fig)
-
-
-    # row = df[df["Prenom"] == student].iloc[0]
-    # fig = radar_generic(row, scores, names, dates)
-    # st.pyplot(fig)
 
 
     zip_buffer = BytesIO()
