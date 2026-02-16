@@ -242,16 +242,28 @@ if uploaded_file:
 
 
     zip_buffer = BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w") as zf:
-        for _, row in df.iterrows():
-            radar_generic(row, df)
-            fname = f"{row['Prenom']}.png"
-            zf.write(fname)
 
+    with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for _, row in df.iterrows():
+            fig = radar_generic(row, df)
+
+            # Save figure to memory
+            img_bytes = BytesIO()
+            fig.savefig(img_bytes, format="png", dpi=300, bbox_inches="tight")
+            plt.close(fig)  # VERY IMPORTANT to avoid memory leaks
+
+            img_bytes.seek(0)
+            filename = f"{row['Prenom']}.png"
+
+            # Write to zip
+            zf.writestr(filename, img_bytes.read())
+
+    # Download button
     st.download_button(
         "📥 Télécharger tous les graphiques (ZIP)",
         data=zip_buffer.getvalue(),
         file_name="student_radar_plots.zip",
         mime="application/zip"
-    )
+)
+
 
